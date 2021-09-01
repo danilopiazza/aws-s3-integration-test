@@ -3,19 +3,13 @@ package io.github.danilopiazza.aws.s3;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.mockito.hamcrest.MockitoHamcrest.argThat;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.function.Consumer;
 
-import org.hamcrest.Description;
-import org.hamcrest.Matcher;
-import org.hamcrest.TypeSafeDiagnosingMatcher;
-import org.hamcrest.TypeSafeMatcher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -63,52 +57,14 @@ class ObjectStorageClientTest {
 
     @Test
     void testPutObject() {
-        when(requestProvider.putObjectRequest(BUCKET, KEY)).thenReturn(putObjectRequestConsumer);
+        try (var mockedRequestBody = mockStatic(RequestBody.class)) {
+            var requestBody = RequestBody.empty();
+            mockedRequestBody.when(() -> RequestBody.fromBytes(CONTENT)).thenReturn(requestBody);
+            when(requestProvider.putObjectRequest(BUCKET, KEY)).thenReturn(putObjectRequestConsumer);
 
-        client.putObject(KEY, CONTENT);
+            client.putObject(KEY, CONTENT);
 
-        verify(s3).putObject(argThat(is(putObjectRequestConsumer)), argThat(containsStream(readingBytes(CONTENT))));
-    }
-
-    static Matcher<RequestBody> containsStream(Matcher<InputStream> matcher) {
-        return new TypeSafeMatcher<RequestBody>() {
-            @Override
-            protected boolean matchesSafely(RequestBody item) {
-                return matcher.matches(item.contentStreamProvider().newStream());
-            }
-
-            @Override
-            public void describeTo(Description description) {
-                description.appendText("a RequestBody containing ").appendDescriptionOf(matcher);
-            }
-
-            @Override
-            protected void describeMismatchSafely(RequestBody item, Description mismatchDescription) {
-                mismatchDescription.appendText("does not contain an InputStream ");
-            }
-        };
-    }
-
-    static Matcher<InputStream> readingBytes(Matcher<byte[]> matcher) {
-        return new TypeSafeDiagnosingMatcher<InputStream>() {
-            @Override
-            protected boolean matchesSafely(InputStream item, Description mismatchDescription) {
-                try {
-                    return matcher.matches(item.readAllBytes());
-                } catch (IOException e) {
-                    mismatchDescription.appendValue(e);
-                    return false;
-                }
-            }
-
-            @Override
-            public void describeTo(Description description) {
-                description.appendText("an InputStream reading ").appendDescriptionOf(matcher);
-            }
-        };
-    }
-
-    static Matcher<InputStream> readingBytes(byte[] bytes) {
-        return readingBytes(equalTo(bytes));
+            verify(s3).putObject(putObjectRequestConsumer, requestBody);
+        }
     }
 }
